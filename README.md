@@ -18,8 +18,7 @@ Easy-to-use automatic trading for Binance Spot with Telegram integration
 2. Generate a Binance API key (with Spot access) and put it in `credentials.py`.
 3. Run `pip3 install -r requirements.txt`.
 4. Run `python3 init_indicators_dict.py`.
-5. Run `python3 init_orders_dict.py`.
-6. Run `python3 main.py`.
+5. Run `python3 main.py`.
 
 This will run an example bot on trading Bitcoin with 4 strategies simultaneously. 
 
