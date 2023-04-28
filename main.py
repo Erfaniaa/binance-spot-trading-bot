@@ -649,7 +649,7 @@ def main() -> None:
 		update_account_balance(FIRST_COIN_SYMBOL)
 		log_results()
 		sleep(4 * SLEEP_INTERVAL)
-		if not is_oco_active() and (True or is_it_time_to_buy()):
+		if not is_oco_active() and is_it_time_to_buy():
 				buy_with_oco(CONTRACT_SYMBOL, total_account_balance, TAKE_PROFIT_PERCENT,
 							 STOP_LOSS_PERCENT)
 		is_bot_started = True
