@@ -27,6 +27,7 @@ contract_open_orders_count = 0
 open_orders_list = []
 last_account_available_balances_list = []
 last_total_account_balances_list = []
+last_coin_quantity = 0
 
 
 @retry(MAXIMUM_NUMBER_OF_API_CALL_TRIES, lambda e: logging.error(f"ERROR in update_current_time: {e}") or ERROR)
@@ -550,42 +551,42 @@ def update_is_macd_negative() -> None:
 	is_macd_negative = indicators_dict["macd_line"] < 0
 
 
-def is_oco_active() -> bool:
-	return len(binance_spot_api.get_oco_open_orders()) != 0
-
-
 def is_it_time_to_buy() -> bool:
 	return is_bot_started and is_price_increasing and not last_is_price_increasing
 
 
+def is_it_time_to_sell() -> bool:
+	return is_bot_started and not is_price_increasing and last_is_price_increasing
+
+
 def is_it_time_to_update_and_trade(current_time: datetime) -> bool:
 	second = int(current_time.second) % 60
-	return HANDLING_POSITIONS_TIME_SECOND <= second and second <= HANDLING_POSITIONS_TIME_SECOND + 1
+	return HANDLING_TRADES_TIME_SECOND <= second and second <= HANDLING_TRADES_TIME_SECOND + 1
 
 
-def buy_with_oco(
+def buy(
 	contract_symbol: str,
-	first_coin_amount: float,
-	take_profit_percent: float, 
-	stop_loss_percent: float,
+	first_coin_amount: float
 ) -> int:
+	global last_coin_quantity
 	logging.info("=" * 60)
 	logging.info("buy")
+	last_coin_quantity = 0
 	market_order_created = False
-	position_quantity = round_down(WALLET_USAGE_PERCENT / 100 * first_coin_amount / contract_last_price, POSITION_QUANTITY_DECIMAL_DIGITS)
-	if position_quantity < 10 ** (-POSITION_QUANTITY_DECIMAL_DIGITS):
+	coin_quantity = round_down(WALLET_USAGE_PERCENT / 100 * first_coin_amount / contract_last_price, COIN_QUANTITY_DECIMAL_DIGITS)
+	if coin_quantity < 10 ** (-COIN_QUANTITY_DECIMAL_DIGITS):
 		logging.info("=" * 60)
 		return SUCCESSFUL
 	for i in range(MAXIMUM_NUMBER_OF_API_CALL_TRIES):
 		try:
-			update_contract_last_price(contract_symbol)
 			market_order = binance_spot_api.new_order(symbol=contract_symbol,
 													  side="BUY",
-													  quantity=position_quantity,
+													  quantity=coin_quantity,
 													  type="MARKET",
 													  timestamp=get_local_timestamp())
 			send_buy_message()
 			market_order_created = True
+			last_coin_quantity = coin_quantity
 			break
 		except:
 			pass
@@ -593,33 +594,34 @@ def buy_with_oco(
 		logging.error("ERROR in buy")
 		logging.info("=" * 60)
 		return ERROR
-	sleep(4 * SLEEP_INTERVAL)
+
+
+def sell(
+	contract_symbol: str
+) -> int:
+	global last_coin_quantity
+	logging.info("=" * 60)
+	logging.info("sell")
+	market_order_created = False
+	if last_coin_quantity < 10 ** (-COIN_QUANTITY_DECIMAL_DIGITS):
+		logging.info("=" * 60)
+		return SUCCESSFUL
 	for i in range(MAXIMUM_NUMBER_OF_API_CALL_TRIES):
 		try:
-			position_entry_price = contract_last_price
-			market_order = binance_spot_api.get_order(symbol=contract_symbol, orderId=market_order["orderId"], timestamp=get_local_timestamp())
-			try:
-				if float(market_order["price"]) > 0:
-					position_entry_price = contract_last_price
-			except:
-				pass
-			take_profit_price = round((1 + take_profit_percent / 100) * position_entry_price, PRICE_DECIMAL_DIGITS)
-			stop_loss_price = round((1 + stop_loss_percent / 100) * position_entry_price, PRICE_DECIMAL_DIGITS)
-			oco_order = binance_spot_api.new_oco_order(symbol=contract_symbol,
-													   side="SELL",
-													   price=take_profit_price,
-													   stopPrice=stop_loss_price,
-													   stopLimitPrice=stop_loss_price,
-													   stopLimitTimeInForce="GTC",
-													   quantity=position_quantity,
-													   timestamp=get_local_timestamp())
-			send_oco_message()
-			return SUCCESSFUL
+			market_order = binance_spot_api.new_order(symbol=contract_symbol,
+													  side="SELL",
+													  quantity=last_coin_quantity,
+													  type="MARKET",
+													  timestamp=get_local_timestamp())
+			send_sell_message()
+			market_order_created = True
+			break
 		except:
 			pass
-	logging.error("ERROR in buy_with_oco")
-	logging.info("=" * 60)
-	return ERROR
+	if not market_order_created:
+		logging.error("ERROR in sell")
+		logging.info("=" * 60)
+		return ERROR
 
 
 def main() -> None:
@@ -649,9 +651,10 @@ def main() -> None:
 		update_account_balance(FIRST_COIN_SYMBOL)
 		log_results()
 		sleep(4 * SLEEP_INTERVAL)
-		if not is_oco_active() and (True or is_it_time_to_buy()):
-				buy_with_oco(CONTRACT_SYMBOL, total_account_balance, TAKE_PROFIT_PERCENT,
-							 STOP_LOSS_PERCENT)
+		if is_it_time_to_buy() and not is_it_time_to_sell():
+			buy(CONTRACT_SYMBOL, total_account_balance)
+		elif is_it_time_to_sell() and not is_it_time_to_buy():
+			sell(CONTRACT_SYMBOL)
 		is_bot_started = True
 
 
