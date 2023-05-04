@@ -20,7 +20,7 @@ Easy-to-use automatic trading for Binance Spot with Telegram integration
 4. Run `python3 init_indicators_dict.py`.
 5. Run `python3 main.py`.
 
-This will run an example bot on trading Bitcoin with 4 strategies simultaneously. 
+This will run an example bot on trading Bitcoin. 
 
 ## Config
 
